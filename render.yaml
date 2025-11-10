@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: evolution-api-lite
+    plan: free
+    docker:
+      dockerfile: Dockerfile
+      dockerContext: .
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 8080
+      - key: JWT_SECRET
+        generateValue: true
+    healthCheckPath: /api/health
