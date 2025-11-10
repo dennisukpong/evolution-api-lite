@@ -53,7 +53,15 @@ import {
 } from '@api/dto/sendMessage.dto';
 import * as s3Service from '@api/integrations/storage/s3/libs/minio.server';
 import { ProviderFiles } from '@api/provider/sessions';
-import { PrismaRepository } from '@api/repository/repository.service';
+//import { PrismaRepository } from '@api/repository/repository.service';
+
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../../../../../services/prisma.service';
+
+@Injectable()
+export class WhatsappBaileysService {
+  constructor(private readonly prismaService: PrismaService) {}
+
 import { waMonitor } from '@api/server.module';
 import { CacheService } from '@api/services/cache.service';
 import { ChannelStartupService } from '@api/services/channel.service';
@@ -1187,7 +1195,7 @@ export class BaileysStartupService extends ChannelStartupService {
             };
 
             if (this.configService.get<Database>('DATABASE').SAVE_DATA.MESSAGE_UPDATE)
-              await this.prismaRepository.messageUpdate.create({
+              await await this.prismaService.messageUpdate.create({
                 data: message,
               });
 
@@ -1202,7 +1210,7 @@ export class BaileysStartupService extends ChannelStartupService {
               }
             }
 
-            await this.prismaRepository.message.update({
+            await await this.prismaService.message.update({
               where: { id: findMessage.id },
               data: { status: status[update.status] },
             });
@@ -1222,11 +1230,11 @@ export class BaileysStartupService extends ChannelStartupService {
           this.sendDataWebhook(Events.MESSAGES_UPDATE, message);
 
           if (this.configService.get<Database>('DATABASE').SAVE_DATA.MESSAGE_UPDATE)
-            await this.prismaRepository.messageUpdate.create({
+            await this.prismaService.messageUpdate.create({
               data: message,
             });
 
-          const existingChat = await this.prismaRepository.chat.findFirst({
+          const existingChat = await this.prismaService.chat.findUnique({
             where: { instanceId: this.instanceId, remoteJid: message.remoteJid },
           });
 
