@@ -1,56 +1,30 @@
-FROM node:20-alpine AS builder
+FROM node:18-alpine
 
-RUN apk update && \
-    apk add git wget curl bash openssl
+WORKDIR /app
 
-LABEL version="2.2.1" description="Api to control whatsapp features through http requests." 
-LABEL maintainer="Davidson Gomes" git="https://github.com/DavidsonGomes"
-LABEL contact="contato@atendai.com"
+# Copy package files
+COPY package*.json ./
+COPY tsconfig.json ./
 
-WORKDIR /evolution
+# Install dependencies
+RUN npm ci
 
-COPY ./package.json ./tsconfig.json ./
+# Copy source code
+COPY . .
 
-RUN npm install
-
-COPY ./src ./src
-COPY ./public ./public
-COPY ./prisma ./prisma
-COPY ./.env.example ./.env
-COPY ./runWithProvider.js ./
-COPY ./tsup.config.ts ./
-
-COPY ./Docker ./Docker
-
-RUN chmod +x ./Docker/scripts/* && dos2unix ./Docker/scripts/*
-
-RUN ./Docker/scripts/generate_database.sh
-
+# Build the application
 RUN npm run build
 
-FROM node:20-alpine AS final
+# Create necessary directories
+RUN mkdir -p sessions logs public
 
-RUN apk update && \
-    apk add tzdata bash openssl
-
-ENV TZ=America/Sao_Paulo
-
-WORKDIR /evolution
-
-COPY --from=builder /evolution/package.json ./package.json
-COPY --from=builder /evolution/package-lock.json ./package-lock.json
-
-COPY --from=builder /evolution/node_modules ./node_modules
-COPY --from=builder /evolution/dist ./dist
-COPY --from=builder /evolution/prisma ./prisma
-COPY --from=builder /evolution/public ./public
-COPY --from=builder /evolution/.env ./.env
-COPY --from=builder /evolution/Docker ./Docker
-COPY --from=builder /evolution/runWithProvider.js ./runWithProvider.js
-COPY --from=builder /evolution/tsup.config.ts ./tsup.config.ts
-
-ENV DOCKER_ENV=true
+# Copy public files for web client
+COPY public/ ./public/
 
 EXPOSE 8080
 
-ENTRYPOINT ["/bin/bash", "-c", ". ./Docker/scripts/deploy_database.sh && npm run start:prod" ]
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/api/health || exit 1
+
+CMD ["node", "dist/src/main.js"]
