@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Evolution API Lite - Web Client</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        header { text-align: center; margin-bottom: 30px; color: white; }
+        header h1 { font-size: 2.5rem; margin-bottom: 10px; }
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; }
+        .card { background: white; border-radius: 15px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        .card h2 { margin-bottom: 20px; color: #333; border-bottom: 2px solid #667eea; padding-bottom: 10px; }
+        .session-controls { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+        input, textarea { padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px; flex: 1; min-width: 200px; }
+        textarea { min-height: 100px; resize: vertical; }
+        button { padding: 12px 24px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; transition: background 0.3s; }
+        button:hover { background: #5a6fd8; }
+        .status { padding: 12px; border-radius: 8px; font-weight: bold; text-align: center; }
+        .connected { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .disconnected { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .waiting { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        #qrContainer { text-align: center; margin: 20px 0; }
+        #qrImage { max-width: 300px; border: 10px solid white; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        .countdown { text-align: center; font-weight: bold; color: #e74c3c; margin-top: 10px; }
+        .message-form { display: flex; flex-direction: column; gap: 15px; }
+        .logs { height: 200px; overflow-y: auto; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 5px; padding: 10px; font-family: 'Courier New', monospace; font-size: 12px; }
+        .log-entry { margin-bottom: 5px; padding: 2px 0; }
+        .timestamp { color: #6c757d; font-weight: bold; }
+        @media (max-width: 768px) { .dashboard { grid-template-columns: 1fr; } .session-controls { flex-direction: column; } input, textarea { min-width: unset; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Evolution API Lite</h1>
+            <p>WhatsApp Business API Dashboard</p>
+        </header>
+        <div class="dashboard">
+            <div class="card">
+                <h2>Session Management</h2>
+                <div class="session-controls">
+                    <input type="text" id="sessionId" placeholder="Session ID" value="default">
+                    <button onclick="initSession()">Start Session</button>
+                    <button onclick="logoutSession()">Logout</button>
+                </div>
+                <div id="sessionStatus" class="status disconnected">Status: Disconnected</div>
+            </div>
+            <div class="card" id="qrCard" style="display: none;">
+                <h2>QR Code</h2>
+                <div id="qrContainer"><img id="qrImage" src="" alt="QR Code"></div>
+                <p>Scan this QR code with WhatsApp</p>
+                <div class="countdown">Expires in: <span id="countdown">120</span>s</div>
+            </div>
+            <div class="card" id="messageCard" style="display: none;">
+                <h2>Send Test Message</h2>
+                <div class="message-form">
+                    <input type="text" id="phoneNumber" placeholder="Phone number (e.g., 1234567890)">
+                    <textarea id="messageText" placeholder="Your message">Hello from Evolution API Lite!</textarea>
+                    <button onclick="sendMessage()">Send Message</button>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Event Logs</h2>
+                <div id="eventLogs" class="logs"></div>
+            </div>
+        </div>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        class EvolutionWebClient {
+            constructor() { this.socket = io(); this.sessionId = 'default'; this.countdownInterval = null; this.initializeEventListeners(); this.joinSession(); this.logEvent('Web client initialized'); }
+            initializeEventListeners() {
+                this.socket.on('qr_generated', (data) => { this.logEvent('QR code generated'); this.showQRCode(data.qr, data.expiresAt); });
+                this.socket.on('connected', (data) => { this.logEvent('WhatsApp connected'); this.setStatus('connected', 'Connected!'); this.hideQRCode(); this.showMessageCard(); });
+                this.socket.on('disconnected', (data) => { this.logEvent('Disconnected'); this.setStatus('disconnected', 'Disconnected'); this.hideQRCode(); this.hideMessageCard(); });
+                this.socket.on('session_initialized', (data) => { this.logEvent('Session initialized'); this.setStatus('waiting', 'Waiting for QR...'); });
+                this.socket.on('message_sent', (data) => { this.logEvent('Message sent'); alert('Message sent!'); });
+                this.socket.on('error', (data) => { this.logEvent('Error: ' + data.error); this.setStatus('disconnected', 'Error'); alert('Error: ' + data.error); });
+                document.getElementById('sessionId').addEventListener('change', (e) => { this.sessionId = e.target.value; this.joinSession(); });
+            }
+            joinSession() { this.socket.emit('join_session', this.sessionId); this.logEvent('Joined session: ' + this.sessionId); }
+            initSession() { this.socket.emit('init_session', this.sessionId); this.logEvent('Initializing session'); }
+            logoutSession() { this.socket.emit('logout_session', this.sessionId); this.logEvent('Logging out'); }
+            showQRCode(qrDataUrl, expiresAt) { document.getElementById('qrImage').src = qrDataUrl; document.getElementById('qrCard').style.display = 'block'; this.startCountdown(expiresAt); this.setStatus('waiting', 'Scan QR Code'); }
+            hideQRCode() { document.getElementById('qrCard').style.display = 'none'; this.stopCountdown(); }
+            showMessageCard() { document.getElementById('messageCard').style.display = 'block'; }
+            hideMessageCard() { document.getElementById('messageCard').style.display = 'none'; }
+            setStatus(status, message) { const el = document.getElementById('sessionStatus'); el.className = `status ${status}`; el.textContent = message; }
+            startCountdown(expiresAt) { this.stopCountdown(); const update = () => { const now = Date.now(); const remaining = Math.max(0, Math.floor((expiresAt - now) / 1000)); document.getElementById('countdown').textContent = remaining; if (remaining <= 0) { this.stopCountdown(); this.setStatus('disconnected', 'QR Expired'); this.hideQRCode(); } }; update(); this.countdownInterval = setInterval(update, 1000); }
+            stopCountdown() { if (this.countdownInterval) clearInterval(this.countdownInterval); }
+            sendMessage() { const phone = document.getElementById('phoneNumber').value; const msg = document.getElementById('messageText').value; if (!phone || !msg) { alert('Enter phone and message'); return; } this.socket.emit('send_message', { sessionId: this.sessionId, to: phone.replace(/\D/g, '') + '@s.whatsapp.net', message: msg }); this.logEvent('Sending message to: ' + phone); }
+            logEvent(message) { const logs = document.getElementById('eventLogs'); const time = new Date().toLocaleTimeString(); const entry = document.createElement('div'); entry.className = 'log-entry'; entry.innerHTML = `<span class="timestamp">[${time}]</span> ${message}`; logs.appendChild(entry); logs.scrollTop = logs.scrollHeight; }
+        }
+        document.addEventListener('DOMContentLoaded', () => { window.client = new EvolutionWebClient(); });
+        function initSession() { window.client.initSession(); }
+        function logoutSession() { window.client.logoutSession(); }
+        function sendMessage() { window.client.sendMessage(); }
+    </script>
+</body>
+</html>
