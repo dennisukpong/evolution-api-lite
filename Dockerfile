@@ -1,4 +1,7 @@
 FROM node:20-alpine
+# Install git in the container
+RUN apk add --no-cache git
+
 
 WORKDIR /app
 
